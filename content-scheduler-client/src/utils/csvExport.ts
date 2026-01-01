@@ -1,5 +1,36 @@
-export const exportToCSV = (posts: Post[], filename: string = 'scheduled-posts.csv') => {
-  // Define CSV headers
+/* ---------------- CSV HELPERS ---------------- */
+
+import type { Post } from "../types";
+
+const sanitizeCSVCell = (value: string): string => {
+  if (!value) return '';
+
+  // Prevent CSV injection
+  const dangerousStart = /^[=+\-@]/;
+  const safeValue = dangerousStart.test(value)
+    ? `'${value}`
+    : value;
+
+  return `"${safeValue.replace(/"/g, '""')}"`;
+};
+
+const safeDate = (date?: string | Date | null): string => {
+  if (!date) return '';
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? '' : d.toLocaleString();
+};
+
+const safeNumber = (num?: number, decimals = 0): string => {
+  if (typeof num !== 'number' || isNaN(num)) return '0';
+  return decimals ? num.toFixed(decimals) : num.toString();
+};
+
+/* ---------------- CSV EXPORT ---------------- */
+
+export const exportToCSV = (
+  posts: Post[],
+  filename = 'scheduled-posts.csv'
+) => {
   const headers = [
     'Title',
     'Platform',
@@ -13,114 +44,127 @@ export const exportToCSV = (posts: Post[], filename: string = 'scheduled-posts.c
     'Clicks',
     'Impressions',
     'AI Suggested Headline',
-    'AI Suggested Time'
+    'AI Suggested Time',
   ];
 
-  // Convert posts to CSV rows
-  const rows = posts.map(post => [
-    `"${post.title.replace(/"/g, '""')}"`, // Escape quotes in title
-    post.platform,
-    post.status,
-    post.scheduledTime ? new Date(post.scheduledTime).toLocaleString() : '',
-    post.publishedTime ? new Date(post.publishedTime).toLocaleString() : '',
-    post.engagementScore.toFixed(2),
-    post.metrics.likes,
-    post.metrics.shares,
-    post.metrics.comments,
-    post.metrics.clicks,
-    post.metrics.impressions,
-    post.aiSuggestedHeadline ? `"${post.aiSuggestedHeadline.replace(/"/g, '""')}"` : '',
-    post.aiSuggestedTime ? new Date(post.aiSuggestedTime).toLocaleString() : ''
-  ]);
+  const rows = posts.map(post => {
+    const metrics = post.metrics || {
+      likes: 0,
+      shares: 0,
+      comments: 0,
+      clicks: 0,
+      impressions: 0,
+    };
 
-  // Combine headers and rows into CSV string
+    return [
+      sanitizeCSVCell(post.title || ''),
+      sanitizeCSVCell(post.platform || ''),
+      sanitizeCSVCell(post.status || ''),
+      safeDate(post.scheduledTime),
+      safeDate(post.publishedTime),
+      safeNumber(post.engagementScore, 2),
+      safeNumber(metrics.likes),
+      safeNumber(metrics.shares),
+      safeNumber(metrics.comments),
+      safeNumber(metrics.clicks),
+      safeNumber(metrics.impressions),
+      sanitizeCSVCell(post.aiSuggestedHeadline || ''),
+      safeDate(post.aiSuggestedTime),
+    ];
+  });
+
   const csvContent = [
     headers.join(','),
-    ...rows.map(row => row.join(','))
-  ].join('\\n');
+    ...rows.map(row => row.join(',')),
+  ].join('\n');
 
-  // Create blob and trigger download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
+  const blob = new Blob([csvContent], {
+    type: 'text/csv;charset=utf-8;',
+  });
+
   const url = URL.createObjectURL(blob);
-  
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  
-  // Clean up the URL object
-  URL.revokeObjectURL(url);
-}
 
-/**
- * Get day name from day number (0-6)
- */
-export const getDayName = (dayNumber: number): string => {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  return days[dayNumber] || 'Unknown';
+  URL.revokeObjectURL(url);
 };
 
-/**
- * Format hour in 12-hour format with AM/PM
- */
+/* ---------------- FORMATTERS ---------------- */
+
+export const getDayName = (dayNumber: number): string => {
+  const days = [
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+  ];
+  return days[dayNumber] ?? 'Unknown';
+};
+
 export const getHourFormat = (hour: number): string => {
+  if (hour < 0 || hour > 23) return '';
   const period = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 || 12;
   return `${displayHour}:00 ${period}`;
 };
 
-/**
- * Format engagement rate as percentage
- */
-export const formatEngagementRate = (rate: number): string => {
+export const formatEngagementRate = (rate?: number): string => {
+  if (typeof rate !== 'number' || isNaN(rate)) return '0.00%';
   return `${rate.toFixed(2)}%`;
 };
 
-/**
- * Get color code for each platform
- */
-export const getPlatformColor = (platform: string): string => {
+export const getPlatformColor = (platform?: string): string => {
+  const normalized =
+    platform?.charAt(0).toUpperCase() +
+    platform?.slice(1).toLowerCase();
+
   const colors: Record<string, string> = {
-    'Twitter': '#1DA1F2',
-    'LinkedIn': '#0A66C2',
-    'Facebook': '#1877F2',
-    'Instagram': '#E4405F'
+    Twitter: '#1DA1F2',
+    LinkedIn: '#0A66C2',
+    Facebook: '#1877F2',
+    Instagram: '#E4405F',
   };
-  return colors[platform] || '#6B7280';
+
+  return colors[normalized] || '#6B7280';
 };
 
-/**
- * Calculate total engagement from metrics
- */
-export const calculateTotalEngagement = (metrics: Post['metrics']): number => {
-  return metrics.likes + metrics.shares + metrics.comments + metrics.clicks;
+export const calculateTotalEngagement = (
+  metrics?: Post['metrics']
+): number => {
+  if (!metrics) return 0;
+  return (
+    (metrics.likes || 0) +
+    (metrics.shares || 0) +
+    (metrics.comments || 0) +
+    (metrics.clicks || 0)
+  );
 };
 
-/**
- * Format large numbers with K/M suffix
- */
-export const formatNumber = (num: number): string => {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
+export const formatNumber = (num?: number): string => {
+  if (typeof num !== 'number' || isNaN(num)) return '0';
+
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(1) + 'M';
   }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
+  if (num >= 1_000) {
+    return (num / 1_000).toFixed(1) + 'K';
   }
   return num.toString();
 };
 
-/**
- * Get status color
- */
-export const getStatusColor = (status: string): string => {
+export const getStatusColor = (status?: string): string => {
   const colors: Record<string, string> = {
-    'draft': '#6B7280',
-    'scheduled': '#F59E0B',
-    'published': '#10B981'
+    draft: '#6B7280',
+    scheduled: '#F59E0B',
+    published: '#10B981',
   };
-  return colors[status] || '#6B7280';
+  return colors[status || 'draft'] || '#6B7280';
 };

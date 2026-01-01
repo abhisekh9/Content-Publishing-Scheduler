@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Custom reusable styles ---------- */
+
+.btn-primary {
+  @apply px-4 py-2 rounded-xl bg-indigo-600 text-white
+         hover:bg-indigo-700 transition active:scale-95;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 rounded-xl border
+         hover:bg-slate-100 dark:hover:bg-slate-800 transition;
+}
+
+.select {
+  @apply px-4 py-2 rounded-xl border bg-white
+         focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}

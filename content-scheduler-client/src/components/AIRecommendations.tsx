@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { aiAPI } from '../services/api';
-import type{ AIAnalysis } from '../types';
+import type { AIAnalysis } from '../types';
 import { getDayName, getHourFormat } from '../utils/csvExport';
 
 interface AIRecommendationsProps {
@@ -14,163 +14,195 @@ const AIRecommendations = ({ selectedPlatform }: AIRecommendationsProps) => {
 
   useEffect(() => {
     fetchRecommendations();
-  }, [selectedPlatform]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlatform || 'all']);
 
   const fetchRecommendations = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await aiAPI.getOptimalTimes(selectedPlatform);
-      setAnalysis(response.data.data);
+
+      const res = await aiAPI.getOptimalTimes(
+        selectedPlatform || undefined
+      );
+
+      setAnalysis(res.data.data || null);
     } catch (err: any) {
       console.error('AI API Error:', err);
-      setError(err.response?.data?.error || 'Failed to fetch AI recommendations');
+      setError(
+        err.response?.data?.error ||
+          'Failed to fetch AI recommendations'
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  /* ---------------- LOADING ---------------- */
   if (loading) {
     return (
-      <div className="ai-recommendations loading">
-        <div className="ai-header">
-          <h3>🤖 AI Insights</h3>
-        </div>
-        <div className="loading-content">
-          <div className="spinner"></div>
-          <p>Analyzing your data...</p>
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-semibold mb-3">
+          🤖 AI Insights
+        </h3>
+        <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
+          <span>Analyzing your data...</span>
         </div>
       </div>
     );
   }
 
+  /* ---------------- ERROR ---------------- */
   if (error) {
     return (
-      <div className="ai-recommendations error">
-        <div className="ai-header">
-          <h3>🤖 AI Insights</h3>
-        </div>
-        <div className="error-content">
-          <p className="error-message">{error}</p>
-          <button onClick={fetchRecommendations} className="btn-retry">
-            🔄 Retry
-          </button>
-        </div>
+      <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+        <h3 className="text-lg font-semibold mb-2">
+          🤖 AI Insights
+        </h3>
+        <p className="text-sm text-red-600 mb-3">
+          {error}
+        </p>
+        <button
+          onClick={fetchRecommendations}
+          className="rounded-md border border-red-300 bg-white px-3 py-1 text-sm hover:bg-red-100"
+        >
+          🔄 Retry
+        </button>
       </div>
     );
   }
 
-  if (!analysis || !analysis.optimalTimes || analysis.optimalTimes.length === 0) {
+  /* ---------------- EMPTY ---------------- */
+  if (!analysis || !analysis.optimalTimes?.length) {
     return (
-      <div className="ai-recommendations empty">
-        <div className="ai-header">
-          <h3>🤖 AI Insights</h3>
-        </div>
-        <div className="empty-content">
-          <div className="empty-icon">📊</div>
-          <h4>Not Enough Data</h4>
-          <p>Publish at least 5 posts with good engagement to receive AI-powered insights and recommendations.</p>
-          <div className="progress-indicator">
-            <div className="progress-text">Keep posting to unlock AI features!</div>
-          </div>
-        </div>
+      <div className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm">
+        <h3 className="text-lg font-semibold mb-2">
+          🤖 AI Insights
+        </h3>
+        <div className="text-3xl mb-2">📊</div>
+        <p className="text-sm text-gray-600">
+          Publish at least 5 high-engagement posts to unlock AI insights.
+        </p>
       </div>
     );
   }
 
+  /* ---------------- UI ---------------- */
   return (
-    <div className="ai-recommendations">
-      <div className="ai-header">
-        <h3>🤖 AI-Powered Insights</h3>
-        <button className="btn-refresh-small" onClick={fetchRecommendations} title="Refresh insights">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      {/* HEADER */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">
+          🤖 AI-Powered Insights
+        </h3>
+        <button
+          onClick={fetchRecommendations}
+          title="Refresh insights"
+          className="rounded-md border px-2 py-1 text-sm hover:bg-gray-100"
+        >
           🔄
         </button>
       </div>
 
-      {/* Optimal Posting Times */}
-      <div className="recommendation-section">
-        <h4 className="section-title">⏰ Best Times to Post</h4>
-        <div className="optimal-times">
-          {analysis.optimalTimes.slice(0, 3).map((time, index) => (
-            <div key={index} className="time-card">
-              <div className="time-rank-badge">#{index + 1}</div>
-              <div className="time-details">
-                <div className="time-day">{getDayName(time.dayOfWeek)}</div>
-                <div className="time-hour">{getHourFormat(time.hour)}</div>
+      {/* BEST TIMES */}
+      <div className="mb-5">
+        <h4 className="text-sm font-semibold mb-2">
+          ⏰ Best Times to Post
+        </h4>
+
+        <div className="space-y-3">
+          {analysis.optimalTimes.slice(0, 3).map((time, i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-gray-200 p-3 text-sm"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-medium">
+                  #{i + 1} · {getDayName(time.dayOfWeek)}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {getHourFormat(time.hour)}
+                </span>
               </div>
-              <div className="time-prediction">
-                <div className="prediction-bar">
-                  <div 
-                    className="prediction-fill" 
-                    style={{ width: `${time.predictedEngagement}%` }}
-                  ></div>
-                </div>
-                <span className="prediction-value">{time.predictedEngagement}% engagement</span>
+
+              <div className="mb-1 text-gray-700">
+                {time.predictedEngagement}% predicted engagement
               </div>
-              <p className="time-reason">{time.reason}</p>
+
+              <p className="text-xs text-gray-500">
+                {time.reason}
+              </p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Content Patterns */}
-      {analysis.contentPatterns && analysis.contentPatterns.length > 0 && (
-        <div className="recommendation-section">
-          <h4 className="section-title">📊 High-Performing Patterns</h4>
-          <ul className="pattern-list">
-            {analysis.contentPatterns.map((pattern, index) => (
-              <li key={index} className="pattern-item">
-                <span className="pattern-bullet">✓</span>
-                <span className="pattern-text">{pattern}</span>
-              </li>
+      {/* CONTENT PATTERNS */}
+      {analysis.contentPatterns?.length > 0 && (
+        <div className="mb-5">
+          <h4 className="text-sm font-semibold mb-2">
+            📊 High-Performing Patterns
+          </h4>
+          <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+            {analysis.contentPatterns.map((p, i) => (
+              <li key={i}>{p}</li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Platform Insights */}
-      {analysis.platformInsights && Object.keys(analysis.platformInsights).length > 0 && (
-        <div className="recommendation-section">
-          <h4 className="section-title">🎯 Platform Insights</h4>
-          <div className="insights-grid">
-            {Object.entries(analysis.platformInsights).map(([platform, insight]) => (
-              <div key={platform} className="insight-card">
-                <div className="insight-header">
-                  <span className="platform-icon">{getPlatformIcon(platform)}</span>
-                  <h5>{platform}</h5>
-                </div>
-                <p className="insight-text">{insight}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* PLATFORM INSIGHTS */}
+      {analysis.platformInsights &&
+        Object.entries(analysis.platformInsights).length > 0 && (
+          <div className="mb-5">
+            <h4 className="text-sm font-semibold mb-2">
+              🎯 Platform Insights
+            </h4>
 
-      {/* Overall Recommendations */}
+            <div className="space-y-3">
+              {Object.entries(analysis.platformInsights).map(
+                ([platform, insight]) => (
+                  <div
+                    key={platform}
+                    className="rounded-lg border border-gray-200 p-3 text-sm"
+                  >
+                    <div className="font-medium mb-1">
+                      {getPlatformIcon(platform)} {platform}
+                    </div>
+                    <p className="text-gray-600">
+                      {insight}
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+      {/* OVERALL */}
       {analysis.recommendations && (
-        <div className="recommendation-section">
-          <h4 className="section-title">💡 AI Recommendations</h4>
-          <div className="recommendations-box">
-            <p className="recommendations-text">{analysis.recommendations}</p>
-          </div>
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+          <strong>💡 AI Recommendation</strong>
+          <p className="mt-1">
+            {analysis.recommendations}
+          </p>
         </div>
       )}
 
-      {/* AI Footer */}
-      <div className="ai-footer">
-        <small>Last updated: {new Date().toLocaleTimeString()}</small>
-      </div>
+      <p className="mt-4 text-xs text-gray-400">
+        Last updated: {new Date().toLocaleTimeString()}
+      </p>
     </div>
   );
 };
 
-// Helper function for platform icons
 const getPlatformIcon = (platform: string): string => {
   const icons: Record<string, string> = {
-    'Twitter': '🐦',
-    'LinkedIn': '💼',
-    'Facebook': '👥',
-    'Instagram': '📸'
+    Twitter: '🐦',
+    LinkedIn: '💼',
+    Facebook: '👥',
+    Instagram: '📸',
   };
   return icons[platform] || '📱';
 };

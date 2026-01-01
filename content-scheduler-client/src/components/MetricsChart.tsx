@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 
 import { metricsAPI } from '../services/api';
-import type{ TrendData, PlatformMetric } from '../types';
+import type { TrendData, PlatformMetric } from '../types';
 import { getPlatformColor, formatNumber } from '../utils/csvExport';
 
 const MetricsChart = () => {
@@ -29,29 +29,32 @@ const MetricsChart = () => {
     fetchMetrics();
   }, []);
 
-  const fetchMetrics = async () => {
+  /* ---------------- FETCH ---------------- */
+  const fetchMetrics = async (days = 30) => {
     try {
       setLoading(true);
       setError(null);
 
       const [trendsRes, platformRes] = await Promise.all([
-        metricsAPI.getTrends(30),
+        metricsAPI.getTrends(days),
         metricsAPI.getPlatformStats(),
       ]);
 
-      setTrends(trendsRes.data.data);
-      setPlatformStats(platformRes.data.data);
+      setTrends(trendsRes.data.data || []);
+      setPlatformStats(platformRes.data.data || []);
     } catch (err) {
       console.error('Failed to fetch metrics:', err);
-      setError('Failed to load analytics data. Please try again.');
+      setError('Failed to load analytics data.');
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------------- Trend Chart Data ---------------- */
-  const trendChartData = Object.values(
-    trends.reduce((acc: any, trend) => {
+  /* ---------------- TREND DATA ---------------- */
+  const trendChartData = useMemo(() => {
+    if (!trends.length) return [];
+
+    const grouped = trends.reduce<Record<string, any>>((acc, trend) => {
       const rawDate = trend._id.date;
 
       if (!acc[rawDate]) {
@@ -67,52 +70,68 @@ const MetricsChart = () => {
       acc[rawDate][trend._id.platform] = Number(
         trend.avgEngagement.toFixed(2)
       );
-      acc[rawDate][`${trend._id.platform}_posts`] = trend.postCount;
 
       return acc;
-    }, {})
-  ).sort(
-    (a: any, b: any) =>
-      new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime()
+    }, {});
+
+    return Object.values(grouped).sort(
+      (a: any, b: any) =>
+        new Date(a.rawDate).getTime() -
+        new Date(b.rawDate).getTime()
+    );
+  }, [trends]);
+
+  /* ---------------- PLATFORM DATA ---------------- */
+  const platformChartData = useMemo(
+    () =>
+      platformStats.map(stat => ({
+        platform: stat._id,
+        engagement: Number(stat.avgEngagement.toFixed(2)),
+        posts: stat.totalPosts,
+        totalInteractions:
+          stat.totalLikes + stat.totalShares + stat.totalComments,
+      })),
+    [platformStats]
   );
 
-  /* ---------------- Platform Chart Data ---------------- */
-  const platformChartData = platformStats.map(stat => ({
-    platform: stat._id,
-    engagement: Number(stat.avgEngagement.toFixed(2)),
-    posts: stat.totalPosts,
-    totalInteractions:
-      stat.totalLikes + stat.totalShares + stat.totalComments,
-  }));
+  const engagementDistribution = useMemo(
+    () =>
+      platformStats.map(stat => ({
+        name: stat._id,
+        value:
+          stat.totalLikes +
+          stat.totalShares +
+          stat.totalComments,
+        color: getPlatformColor(stat._id),
+      })),
+    [platformStats]
+  );
 
-  /* ---------------- Pie Chart Data ---------------- */
-  const engagementDistribution = platformStats.map(stat => ({
-    name: stat._id,
-    value:
-      stat.totalLikes + stat.totalShares + stat.totalComments,
-    color: getPlatformColor(stat._id),
-  }));
+  /* ---------------- TOOLTIP ---------------- */
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
+  }) => {
+    if (!active || !payload?.length) return null;
 
-  /* ---------------- Tooltip ---------------- */
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload?.length) {
-      return (
-        <div className="custom-tooltip">
-          <p className="tooltip-label">{label}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }}>
-              {entry.name}: {Number.isFinite(entry.value)
-                ? entry.value.toLocaleString()
-                : entry.value}
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
+    return (
+      <div className="custom-tooltip">
+        <p className="tooltip-label">{label}</p>
+        {payload.map((entry, i) => (
+          <p key={i} style={{ color: entry.color }}>
+            {entry.name}: {formatNumber(entry.value)}
+          </p>
+        ))}
+      </div>
+    );
   };
 
-  /* ---------------- Loading / Error ---------------- */
+  /* ---------------- STATES ---------------- */
   if (loading) {
     return (
       <div className="metrics-loading">
@@ -126,7 +145,7 @@ const MetricsChart = () => {
     return (
       <div className="metrics-error">
         <p>{error}</p>
-        <button onClick={fetchMetrics} className="btn-retry">
+        <button onClick={() => fetchMetrics()} className="btn-retry">
           🔄 Retry
         </button>
       </div>
@@ -137,7 +156,7 @@ const MetricsChart = () => {
     return (
       <div className="metrics-empty">
         <h3>📊 No Analytics Data Yet</h3>
-        <p>Publish some posts to see your analytics dashboard!</p>
+        <p>Publish posts to see analytics.</p>
       </div>
     );
   }
@@ -147,7 +166,7 @@ const MetricsChart = () => {
     <div className="metrics-container">
       <div className="metrics-header">
         <h2>📊 Analytics Dashboard</h2>
-        <button onClick={fetchMetrics} className="btn-refresh">
+        <button onClick={() => fetchMetrics()} className="btn-refresh">
           🔄 Refresh
         </button>
       </div>
@@ -201,83 +220,66 @@ const MetricsChart = () => {
       {/* Area Chart */}
       <div className="chart-section">
         <h3>📈 Engagement Trends (Last 30 Days)</h3>
-        <ResponsiveContainer width="100%" height={350}>
-          <AreaChart data={trendChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            {platformStats.map(stat => (
-              <Area
-                key={stat._id}
-                dataKey={stat._id}
-                stroke={getPlatformColor(stat._id)}
-                fill={getPlatformColor(stat._id)}
-                fillOpacity={0.3}
-              />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
+        {trendChartData.length ? (
+          <ResponsiveContainer width="100%" height={350}>
+            <AreaChart data={trendChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis label={{ value: '% Engagement', angle: -90, position: 'insideLeft' }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              {platformStats.map(stat => (
+                <Area
+                  key={stat._id}
+                  dataKey={stat._id}
+                  stroke={getPlatformColor(stat._id)}
+                  fill={getPlatformColor(stat._id)}
+                  fillOpacity={0.3}
+                />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="no-data">No trend data available.</p>
+        )}
       </div>
 
       {/* Bar + Pie */}
       <div className="charts-row">
-        <ResponsiveContainer width="50%" height={300}>
-          <BarChart data={platformChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="platform" />
-            <YAxis />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar
-              dataKey="engagement"
-              name="Avg Engagement %"
-              fill="#8884d8"
-            />
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="chart-half">
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={platformChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="platform" />
+              <YAxis />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Bar dataKey="engagement" name="Avg Engagement %" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-        <ResponsiveContainer width="50%" height={300}>
-          <PieChart>
-            <Pie
-              data={engagementDistribution}
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              dataKey="value"
-              label={({ name, percent }) =>
-                `${name}: ${(percent * 100).toFixed(0)}%`
-              }
-            >
-              {engagementDistribution.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={entry.color}
-                />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Detailed Stats */}
-      <div className="platform-stats-section">
-        {platformStats.map(stat => (
-          <div
-            key={stat._id}
-            className="stat-card"
-            style={{
-              borderTop: `4px solid ${getPlatformColor(
-                stat._id
-              )}`,
-            }}
-          >
-            <h4>{stat._id}</h4>
-            <p>{stat.avgEngagement.toFixed(2)}% avg</p>
-          </div>
-        ))}
+        <div className="chart-half">
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={engagementDistribution}
+                cx="50%"
+                cy="50%"
+                outerRadius={100}
+                dataKey="value"
+                label={({ name, percent }) =>
+                  `${name}: ${(percent * 100).toFixed(0)}%`
+                }
+              >
+                {engagementDistribution.map((e, i) => (
+                  <Cell key={i} fill={e.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );

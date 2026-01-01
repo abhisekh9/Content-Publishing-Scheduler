@@ -1,5 +1,9 @@
-import type{ Post } from '../types';
-import { getPlatformColor, formatEngagementRate, getStatusColor } from '../utils/csvExport';
+import type { Post } from '../types';
+import {
+  getPlatformColor,
+  formatEngagementRate,
+  getStatusColor,
+} from '../utils/csvExport';
 
 interface PostListProps {
   posts: Post[];
@@ -7,46 +11,53 @@ interface PostListProps {
   onPostDelete: (postId: string) => void;
 }
 
-const PostList = ({ posts, onPostClick, onPostDelete }: PostListProps) => {
-  const formatDate = (date: Date | undefined) => {
+const PostList = ({
+  posts,
+  onPostClick,
+  onPostDelete,
+}: PostListProps) => {
+  const formatDate = (date?: Date) => {
     if (!date) return 'Not scheduled';
     return new Date(date).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
   const getStatusBadge = (status: string) => {
     const labels: Record<string, string> = {
-      draft: '📝 DRAFT',
-      scheduled: '⏰ SCHEDULED',
-      published: '✅ PUBLISHED'
+      draft: '📝 Draft',
+      scheduled: '⏰ Scheduled',
+      published: '✅ Published',
     };
+
     return (
-      <span 
-        className="status-badge"
+      <span
+        className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
         style={{ backgroundColor: getStatusColor(status) }}
       >
-        {labels[status] || status.toUpperCase()}
+        {labels[status] || status}
       </span>
     );
   };
 
-  const getPlatformIcon = (platform: string): string => {
+  const getPlatformIcon = (platform: string) => {
     const icons: Record<string, string> = {
-      'Twitter': '🐦',
-      'LinkedIn': '💼',
-      'Facebook': '👥',
-      'Instagram': '📸'
+      Twitter: '🐦',
+      LinkedIn: '💼',
+      Facebook: '👥',
+      Instagram: '📸',
     };
     return icons[platform] || '📱';
   };
 
-  const handleDragStart = (e: React.DragEvent, post: Post) => {
-    // Only allow dragging if not published
+  const handleDragStart = (
+    e: React.DragEvent,
+    post: Post
+  ) => {
     if (post.status === 'published') {
       e.preventDefault();
       return;
@@ -55,107 +66,112 @@ const PostList = ({ posts, onPostClick, onPostDelete }: PostListProps) => {
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDelete = (e: React.MouseEvent, postId: string) => {
+  const handleDelete = (
+    e: React.MouseEvent,
+    postId: string
+  ) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this post?')) {
+    if (
+      window.confirm(
+        'Are you sure you want to delete this post?'
+      )
+    ) {
       onPostDelete(postId);
     }
   };
 
-  // Group posts by status
   const groupedPosts = {
-    draft: posts.filter(p => p.status === 'draft'),
     scheduled: posts.filter(p => p.status === 'scheduled'),
-    published: posts.filter(p => p.status === 'published')
+    draft: posts.filter(p => p.status === 'draft'),
+    published: posts.filter(p => p.status === 'published'),
   };
 
-  const renderPostCard = (post: Post) => (
+  const PostCard = (post: Post) => (
     <div
       key={post._id}
-      className="post-item"
       draggable={post.status !== 'published'}
-      onDragStart={(e) => handleDragStart(e, post)}
+      onDragStart={e => handleDragStart(e, post)}
       onClick={() => onPostClick(post)}
+      className="cursor-pointer rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md"
     >
-      <div className="post-header">
-        <div className="post-title-section">
-          <h4 className="post-title">{post.title}</h4>
-          {getStatusBadge(post.status)}
+      {/* HEADER */}
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <h4 className="font-semibold text-gray-800">
+            {post.title}
+          </h4>
+          <div className="mt-1 flex items-center gap-2">
+            {getStatusBadge(post.status)}
+          </div>
         </div>
-        <div
-          className="platform-badge"
-          style={{ backgroundColor: getPlatformColor(post.platform) }}
+
+        <span
+          className="rounded-md px-2 py-1 text-xs font-medium text-white"
+          style={{
+            backgroundColor: getPlatformColor(post.platform),
+          }}
         >
           {getPlatformIcon(post.platform)} {post.platform}
-        </div>
+        </span>
       </div>
 
-      <p className="post-content">
-        {post.content.length > 150 
-          ? post.content.substring(0, 150) + '...' 
+      {/* CONTENT */}
+      <p className="mb-3 text-sm text-gray-600">
+        {post.content.length > 150
+          ? post.content.slice(0, 150) + '...'
           : post.content}
       </p>
 
-      <div className="post-meta">
-        <div className="meta-item">
-          <span className="meta-label">
-            {post.status === 'published' ? '📅 Published:' : '⏰ Scheduled:'}
-          </span>
-          <span className="meta-value">
-            {formatDate(post.publishedTime || post.scheduledTime)}
-          </span>
-        </div>
-        {post.status === 'published' && (
-          <div className="meta-item">
-            <span className="meta-label">📊 Engagement:</span>
-            <span className="meta-value engagement-score">
-              {formatEngagementRate(post.engagementScore)}
-            </span>
-          </div>
-        )}
+      {/* META */}
+      <div className="mb-2 text-xs text-gray-500">
+        {post.status === 'published'
+          ? `📅 Published: ${formatDate(
+              post.publishedTime
+            )}`
+          : `⏰ Scheduled: ${formatDate(
+              post.scheduledTime
+            )}`}
       </div>
 
+      {/* ENGAGEMENT */}
       {post.status === 'published' && (
-        <div className="post-metrics">
-          <div className="metric-item">
-            <span className="metric-icon">❤️</span>
-            <span className="metric-value">{post.metrics.likes.toLocaleString()}</span>
+        <>
+          <div className="mb-2 text-sm font-medium text-green-600">
+            📊 Engagement:{' '}
+            {formatEngagementRate(post.engagementScore)}
           </div>
-          <div className="metric-item">
-            <span className="metric-icon">🔄</span>
-            <span className="metric-value">{post.metrics.shares.toLocaleString()}</span>
+
+          <div className="mb-3 grid grid-cols-4 gap-2 text-xs text-gray-600">
+            <div>❤️ {post.metrics.likes}</div>
+            <div>🔄 {post.metrics.shares}</div>
+            <div>💬 {post.metrics.comments}</div>
+            <div>👁️ {post.metrics.impressions}</div>
           </div>
-          <div className="metric-item">
-            <span className="metric-icon">💬</span>
-            <span className="metric-value">{post.metrics.comments.toLocaleString()}</span>
-          </div>
-          <div className="metric-item">
-            <span className="metric-icon">👁️</span>
-            <span className="metric-value">{post.metrics.impressions.toLocaleString()}</span>
-          </div>
-        </div>
+        </>
       )}
 
+      {/* AI SUGGESTION */}
       {post.aiSuggestedHeadline && (
-        <div className="ai-suggestion">
-          <span className="ai-badge">🤖 AI</span>
-          <span className="ai-text">{post.aiSuggestedHeadline}</span>
+        <div className="mb-3 rounded-md bg-indigo-50 p-2 text-xs text-indigo-700">
+          🤖 AI: {post.aiSuggestedHeadline}
         </div>
       )}
 
-      <div className="post-actions">
-        <button 
-          className="btn-edit"
-          onClick={(e) => {
+      {/* ACTIONS */}
+      <div className="flex gap-2">
+        <button
+          className="rounded-md border px-3 py-1 text-xs hover:bg-gray-100"
+          onClick={e => {
             e.stopPropagation();
             onPostClick(post);
           }}
         >
           ✏️ Edit
         </button>
-        <button 
-          className="btn-delete"
-          onClick={(e) => handleDelete(e, post._id)}
+
+        <button
+          className="rounded-md border border-red-300 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+          onClick={e => handleDelete(e, post._id)}
         >
           🗑️ Delete
         </button>
@@ -164,70 +180,82 @@ const PostList = ({ posts, onPostClick, onPostDelete }: PostListProps) => {
   );
 
   return (
-    <div className="post-list">
-      <div className="post-list-header">
-        <h2>📋 All Posts</h2>
-        <div className="post-count-badges">
-          <span className="count-badge">Total: {posts.length}</span>
-          <span className="count-badge draft">Drafts: {groupedPosts.draft.length}</span>
-          <span className="count-badge scheduled">Scheduled: {groupedPosts.scheduled.length}</span>
-          <span className="count-badge published">Published: {groupedPosts.published.length}</span>
+    <div className="space-y-6">
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">
+          📋 All Posts
+        </h2>
+        <div className="flex gap-2 text-sm text-gray-600">
+          <span>Total: {posts.length}</span>
+          <span>Drafts: {groupedPosts.draft.length}</span>
+          <span>
+            Scheduled: {groupedPosts.scheduled.length}
+          </span>
+          <span>
+            Published: {groupedPosts.published.length}
+          </span>
         </div>
       </div>
-      
-      {posts.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📝</div>
-          <h3>No posts yet</h3>
-          <p>Create your first post to get started!</p>
-          <button className="btn-primary" onClick={() => onPostClick({} as Post)}>
+
+      {/* EMPTY */}
+      {posts.length === 0 && (
+        <div className="rounded-xl border bg-white p-8 text-center">
+          <div className="text-4xl">📝</div>
+          <h3 className="mt-2 font-semibold">
+            No posts yet
+          </h3>
+          <p className="text-sm text-gray-500">
+            Create your first post to get started
+          </p>
+          <button
+            className="mt-3 rounded-md border px-4 py-2 text-sm hover:bg-gray-100"
+            onClick={() => onPostClick({} as Post)}
+          >
             ✨ Create Post
           </button>
         </div>
-      ) : (
-        <div className="posts-sections">
-          {/* Scheduled Posts */}
-          {groupedPosts.scheduled.length > 0 && (
-            <div className="posts-section">
-              <h3 className="section-title">⏰ Scheduled ({groupedPosts.scheduled.length})</h3>
-              <div className="posts-container">
-                {groupedPosts.scheduled.map(renderPostCard)}
-              </div>
-            </div>
-          )}
-
-          {/* Draft Posts */}
-          {groupedPosts.draft.length > 0 && (
-            <div className="posts-section">
-              <h3 className="section-title">📝 Drafts ({groupedPosts.draft.length})</h3>
-              <div className="posts-container">
-                {groupedPosts.draft.map(renderPostCard)}
-              </div>
-            </div>
-          )}
-
-          {/* Published Posts */}
-          {groupedPosts.published.length > 0 && (
-            <div className="posts-section">
-              <h3 className="section-title">✅ Published ({groupedPosts.published.length})</h3>
-              <div className="posts-container">
-                {groupedPosts.published
-                  .sort((a, b) => new Date(b.publishedTime!).getTime() - new Date(a.publishedTime!).getTime())
-                  .map(renderPostCard)}
-              </div>
-            </div>
-          )}
-        </div>
       )}
 
-      <div className="post-list-help">
-        <p>💡 <strong>Quick Tips:</strong></p>
-        <ul>
-          <li>Click on any post to view or edit details</li>
-          <li>Drag draft or scheduled posts to the calendar to reschedule</li>
-          <li>Published posts cannot be edited or rescheduled</li>
-        </ul>
-      </div>
+      {/* SECTIONS */}
+      {groupedPosts.scheduled.length > 0 && (
+        <section>
+          <h3 className="mb-3 font-medium">
+            ⏰ Scheduled
+          </h3>
+          <div className="grid gap-4">
+            {groupedPosts.scheduled.map(PostCard)}
+          </div>
+        </section>
+      )}
+
+      {groupedPosts.draft.length > 0 && (
+        <section>
+          <h3 className="mb-3 font-medium">
+            📝 Drafts
+          </h3>
+          <div className="grid gap-4">
+            {groupedPosts.draft.map(PostCard)}
+          </div>
+        </section>
+      )}
+
+      {groupedPosts.published.length > 0 && (
+        <section>
+          <h3 className="mb-3 font-medium">
+            ✅ Published
+          </h3>
+          <div className="grid gap-4">
+            {groupedPosts.published
+              .sort(
+                (a, b) =>
+                  new Date(b.publishedTime!).getTime() -
+                  new Date(a.publishedTime!).getTime()
+              )
+              .map(PostCard)}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

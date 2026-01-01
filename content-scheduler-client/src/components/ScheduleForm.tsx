@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type{ Post } from '../types';
-import { aiAPI, postsAPI } from '../services/api';
+import type { Post } from '../types';
+import { aiAPI } from '../services/api';
 
 interface ScheduleFormProps {
   post?: Post | null;
@@ -14,36 +14,54 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
     content: '',
     platform: 'Twitter',
     scheduledTime: undefined,
-    status: 'draft'
+    status: 'draft',
   });
+
   const [headlineSuggestions, setHeadlineSuggestions] = useState<string[]>([]);
   const [loadingHeadlines, setLoadingHeadlines] = useState(false);
 
+  /* ---------------- LOAD POST ---------------- */
   useEffect(() => {
-    if (post) {
-      setFormData(post);
-    }
+    if (!post) return;
+
+    setFormData({
+      title: post.title || '',
+      content: post.content || '',
+      platform: post.platform || 'Twitter',
+      scheduledTime: post.scheduledTime,
+      status: post.status || 'draft',
+    });
   }, [post]);
 
+  /* ---------------- AI HEADLINES ---------------- */
   const handleGenerateHeadlines = async () => {
     if (!formData.content || !formData.platform) return;
-    
+
     try {
       setLoadingHeadlines(true);
-      const response = await aiAPI.generateHeadlines(
-        formData.content.substring(0, 100),
+      const res = await aiAPI.generateHeadlines(
+        formData.content.slice(0, 100),
         formData.platform
       );
-      setHeadlineSuggestions(response.data.data.headlines || []);
+
+      setHeadlineSuggestions(res.data.data || []);
     } catch (error) {
       console.error('Failed to generate headlines:', error);
+      alert('Failed to generate headlines');
     } finally {
       setLoadingHeadlines(false);
     }
   };
 
+  /* ---------------- SUBMIT ---------------- */
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.title || !formData.content || !formData.platform) {
+      alert('Please fill all required fields');
+      return;
+    }
+
     onSave(formData);
   };
 
@@ -51,14 +69,16 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
     <div className="schedule-form-overlay">
       <div className="schedule-form">
         <h2>{post ? 'Edit Post' : 'Create New Post'}</h2>
-        
+
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Title *</label>
             <input
               type="text"
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={e =>
+                setFormData({ ...formData, title: e.target.value })
+              }
               required
             />
           </div>
@@ -66,9 +86,11 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
           <div className="form-group">
             <label>Content *</label>
             <textarea
-              value={formData.content}
-              onChange={(e) => setFormData({ ...formData, content: e.target.value })}
               rows={4}
+              value={formData.content}
+              onChange={e =>
+                setFormData({ ...formData, content: e.target.value })
+              }
               required
             />
           </div>
@@ -77,8 +99,12 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
             <label>Platform *</label>
             <select
               value={formData.platform}
-              onChange={(e) => setFormData({ ...formData, platform: e.target.value as any })}
-              required
+              onChange={e =>
+                setFormData({
+                  ...formData,
+                  platform: e.target.value as Post['platform'],
+                })
+              }
             >
               <option value="Twitter">Twitter</option>
               <option value="LinkedIn">LinkedIn</option>
@@ -91,15 +117,26 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
             <label>Scheduled Time</label>
             <input
               type="datetime-local"
-              value={formData.scheduledTime ? new Date(formData.scheduledTime).toISOString().slice(0, 16) : ''}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                scheduledTime: e.target.value ? new Date(e.target.value) : undefined,
-                status: e.target.value ? 'scheduled' : 'draft'
-              })}
+              value={
+                formData.scheduledTime
+                  ? new Date(formData.scheduledTime)
+                      .toISOString()
+                      .slice(0, 16)
+                  : ''
+              }
+              onChange={e =>
+                setFormData({
+                  ...formData,
+                  scheduledTime: e.target.value
+                    ? new Date(e.target.value)
+                    : undefined,
+                  status: e.target.value ? 'scheduled' : 'draft',
+                })
+              }
             />
           </div>
 
+          {/* AI Headlines */}
           <div className="ai-headline-section">
             <button
               type="button"
@@ -113,11 +150,15 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
             {headlineSuggestions.length > 0 && (
               <div className="headline-suggestions">
                 <p>AI Suggested Headlines:</p>
-                {headlineSuggestions.map((headline, index) => (
+                {headlineSuggestions.map((headline, i) => (
                   <div
-                    key={index}
+                    key={i}
                     className="headline-option"
-                    onClick={() => setFormData({ ...formData, title: headline })}
+                    onClick={() => {
+                      if (window.confirm('Use this headline?')) {
+                        setFormData({ ...formData, title: headline });
+                      }
+                    }}
                   >
                     {headline}
                   </div>
@@ -127,7 +168,11 @@ const ScheduleForm = ({ post, onSave, onCancel }: ScheduleFormProps) => {
           </div>
 
           <div className="form-actions">
-            <button type="button" className="btn-cancel" onClick={onCancel}>
+            <button
+              type="button"
+              className="btn-cancel"
+              onClick={onCancel}
+            >
               Cancel
             </button>
             <button type="submit" className="btn-save">
